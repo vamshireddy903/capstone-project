@@ -1,0 +1,177 @@
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-ecommerce}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./db/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD", "sh", "-lc", "mysqladmin ping -h localhost -p\"$${MYSQL_ROOT_PASSWORD}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    ports:
+      - "8025:8025"
+    # SMTP on 1025 is internal-only; services connect via Docker network
+
+  notification:
+    build: ./services/notification
+    environment:
+      PORT: "8080"
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_USER: root
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+      DB_NAME: ${MYSQL_DATABASE:-ecommerce}
+      SMTP_HOST: mailhog
+      SMTP_PORT: "1025"
+      SMTP_SECURE: "false"
+      SMTP_USER: ""
+      SMTP_PASS: ""
+      EMAIL_FROM: "no-reply@capstone.local"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  user:
+    build: ./services/user
+    environment:
+      PORT: "8080"
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_USER: root
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+      DB_NAME: ${MYSQL_DATABASE:-ecommerce}
+      NOTIFICATION_URL: http://notification:8080
+    depends_on:
+      mysql:
+        condition: service_healthy
+      notification:
+        condition: service_started
+
+  auth:
+    build: ./services/auth
+    environment:
+      PORT: "8080"
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_USER: root
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+      DB_NAME: ${MYSQL_DATABASE:-ecommerce}
+      NOTIFICATION_URL: http://notification:8080
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+      JWT_ISSUER: "capstone-ecommerce"
+      JWT_AUDIENCE: "capstone-ecommerce"
+      OTP_TTL_MINUTES: "10"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      notification:
+        condition: service_started
+
+  catalog:
+    build: ./services/catalog
+    environment:
+      PORT: "8080"
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_USER: root
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+      DB_NAME: ${MYSQL_DATABASE:-ecommerce}
+      NOTIFICATION_URL: http://notification:8080
+    depends_on:
+      mysql:
+        condition: service_healthy
+      notification:
+        condition: service_started
+
+  cart:
+    build: ./services/cart
+    environment:
+      PORT: "8080"
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_USER: root
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+      DB_NAME: ${MYSQL_DATABASE:-ecommerce}
+      NOTIFICATION_URL: http://notification:8080
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+      JWT_ISSUER: "capstone-ecommerce"
+      JWT_AUDIENCE: "capstone-ecommerce"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      notification:
+        condition: service_started
+
+  order:
+    build: ./services/order
+    environment:
+      PORT: "8080"
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_USER: root
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+      DB_NAME: ${MYSQL_DATABASE:-ecommerce}
+      NOTIFICATION_URL: http://notification:8080
+      PAYMENT_URL: http://payment:8080
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+      JWT_ISSUER: "capstone-ecommerce"
+      JWT_AUDIENCE: "capstone-ecommerce"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      payment:
+        condition: service_started
+      notification:
+        condition: service_started
+
+  payment:
+    build: ./services/payment
+    environment:
+      PORT: "8080"
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_USER: root
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+      DB_NAME: ${MYSQL_DATABASE:-ecommerce}
+      NOTIFICATION_URL: http://notification:8080
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+      JWT_ISSUER: "capstone-ecommerce"
+      JWT_AUDIENCE: "capstone-ecommerce"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      notification:
+        condition: service_started
+
+  api-gateway:
+    build: ./api-gateway
+    ports:
+      - "8080:8080"
+    depends_on:
+      - frontend
+      - user
+      - auth
+      - catalog
+      - cart
+      - order
+      - payment
+
+  frontend:
+    build: ./frontend
+    environment:
+      PORT: "8080"
+      NEXT_PUBLIC_API_BASE: "/api"
+    # not exposed directly; api-gateway is the single entrypoint
+
+volumes:
+  mysql_data:
+
