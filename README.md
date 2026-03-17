@@ -12,7 +12,7 @@ This is a **3-tier e-commerce** capstone with:
 From this folder:
 
 ```bash
-cd capstone-ecommerce
+cd capstone-project
 docker compose up --build
 ```
 
